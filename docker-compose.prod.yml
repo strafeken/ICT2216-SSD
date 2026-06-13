@@ -10,10 +10,20 @@ services:
     depends_on:
       - backend
       - frontend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
 
   frontend:
     build:
       context: ./frontend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
 
   backend:
     build:
@@ -22,14 +32,25 @@ services:
       - .env
     depends_on:
       - db
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   db:
     image: mysql:8.4
     env_file:
       - .env
+    command: --innodb-buffer-pool-size=128M --innodb-log-buffer-size=16M
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
 volumes:
   mysql_data:
