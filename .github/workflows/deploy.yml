@@ -48,9 +48,59 @@ jobs:
           name: dependency-check-report
           path: reports/
 
+  sast:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: ./backend
+
+      - name: Run ESLint on frontend
+        run: npx eslint . --format @microsoft/eslint-formatter-sarif --output-file ../reports/frontend.sarif
+        working-directory: ./frontend
+        continue-on-error: true
+
+      - name: Run ESLint on backend
+        run: npx eslint . --format @microsoft/eslint-formatter-sarif --output-file ../reports/backend.sarif
+        working-directory: ./backend
+        continue-on-error: true
+
+      - name: Upload frontend SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: reports/frontend.sarif
+          category: eslint-frontend
+
+      - name: Upload backend SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: reports/backend.sarif
+          category: eslint-backend
+
   deploy:
     runs-on: ubuntu-latest
-    needs: [audit, sca]
+    needs: [audit, sca, sast]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
