@@ -1,14 +1,16 @@
 const express = require('express');
+const { globalLimiter } = require('./middleware/rateLimiter');
 const app = express();
 
-app.use(express.json());
+app.set('trust proxy', 1); // trust first proxy (Nginx)
 
-// Routes
+app.use(express.json());
+app.use(globalLimiter);
+
 app.use('/api/health', require('./routes/health'));
 app.use('/api/users', require('./routes/users'));
 
-// Global error handler
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error(`[ERROR] ${new Date().toISOString()} - ${err.message}`);
   res.status(500).json({ error: 'Internal server error' });
 });
