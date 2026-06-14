@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 
 const LEVEL_STYLES = {
@@ -15,6 +15,7 @@ const JOB_STYLES = {
 const PAGE_SIZE = 15;
 
 function Badge({ label, styleMap }) {
+    // eslint-disable-next-line security/detect-object-injection
     const s = styleMap[label] || { background: "#F1EFE8", color: "#444441" };
     return (
         <span style={{
@@ -33,7 +34,6 @@ function Badge({ label, styleMap }) {
 
 export default function AdminLogs() {
     const [logs, setLogs] = useState([]);
-    const [filtered, setFiltered] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [tab, setTab] = useState("all");
@@ -59,7 +59,11 @@ export default function AdminLogs() {
 
     useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
-    useEffect(() => {
+    // Reset page when filters change
+    useEffect(() => { setPage(1); }, [tab, level, search]);
+
+    // Derived — no setState in effect
+    const filtered = useMemo(() => {
         let result = [...logs];
         if (tab !== "all") result = result.filter(l => l.job === tab);
         if (level) result = result.filter(l => l.level === level);
@@ -67,8 +71,7 @@ export default function AdminLogs() {
             l.msg.toLowerCase().includes(search.toLowerCase()) ||
             l.ip.toLowerCase().includes(search.toLowerCase())
         );
-        setFiltered(result);
-        setPage(1);
+        return result;
     }, [logs, tab, level, search]);
 
     const metrics = {
@@ -166,7 +169,7 @@ export default function AdminLogs() {
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                 />
-                <select style={styles.select} value={range} onChange={e => { setRange(e.target.value); }}>
+                <select style={styles.select} value={range} onChange={e => setRange(e.target.value)}>
                     <option value="1h">Last 1 hour</option>
                     <option value="6h">Last 6 hours</option>
                     <option value="24h">Last 24 hours</option>
@@ -196,7 +199,7 @@ export default function AdminLogs() {
                         ) : paginated.length === 0 ? (
                             <tr><td colSpan={5} style={{ ...styles.td, textAlign: "center", color: "#888", padding: "2rem" }}>No logs match your filters.</td></tr>
                         ) : paginated.map((log, i) => (
-                            <tr key={i} style={{ cursor: "default" }}>
+                            <tr key={i}>
                                 <td style={{ ...styles.td, ...styles.mono, ...styles.muted, width: 160 }}>
                                     {new Date(log.ts).toLocaleString()}
                                 </td>
