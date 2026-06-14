@@ -33,6 +33,11 @@ services:
     depends_on:
       - db
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
     deploy:
       resources:
         limits:
