@@ -1,5 +1,5 @@
 const mysql = require('mysql2');
-const { sanitizeLog } = require('../utils/sanitize');
+const { log, logError } = require('../utils/consoleLogger');
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -12,11 +12,11 @@ const pool = mysql.createPool({
 });
 
 pool.on('connection', (connection) => {
-  console.log(`[DB] ${new Date().toISOString()} - New connection established (id: ${sanitizeLog(connection.threadId)})`);
+  log(`[DB] ${new Date().toISOString()} - New connection established (id:`, connection.threadId);
 });
 
 pool.on('error', (err) => {
-  console.error(`[DB] ${new Date().toISOString()} - Pool error: ${sanitizeLog(err.message)}`);
+  logError(`[DB] ${new Date().toISOString()} - Pool error:`, err.message);
 });
 
 module.exports = pool;
