@@ -39,7 +39,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 1G
 
   db:
     image: mysql:8.4.9
@@ -54,7 +54,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 4G
 
 volumes:
   mysql_data:
