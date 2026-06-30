@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { AuthContext } from "./context";
-import { apiFetch, STORAGE_KEY } from "./api";
+import { apiFetch, STORAGE_KEY, fetchCsrfToken, CSRF_KEY } from "./api";
 
 /**
  * AuthContext — the single source of truth for "who is logged in".
@@ -29,8 +29,6 @@ import { apiFetch, STORAGE_KEY } from "./api";
  *   2. Proactively log the user out client-side once they've been idle for
  *      15 minutes, rather than waiting for some future API call to fail.
  */
-
-const REFRESH_KEY = "orca.refresh";
 
 // Mirrors backend/middleware/authMiddleware.js INACTIVITY_TIMEOUT_MS. Kept as
 // a separate constant (not imported, since this is a different runtime) —
@@ -79,15 +77,13 @@ export function AuthProvider({ children }) {
   // purity rule (effects, unlike render, are allowed to be impure).
   const lastActivityRef = useRef(null);
 
-  const persist = useCallback((newToken, refreshToken) => {
+  const persist = useCallback((newToken) => {
     if (newToken) {
       sessionStorage.setItem(STORAGE_KEY, newToken);
-      if (refreshToken) sessionStorage.setItem(REFRESH_KEY, refreshToken);
       setToken(newToken);
       setUser(decodeJwt(newToken));
     } else {
       sessionStorage.removeItem(STORAGE_KEY);
-      sessionStorage.removeItem(REFRESH_KEY);
       setToken(null);
       setUser(null);
     }
@@ -119,7 +115,8 @@ export function AuthProvider({ children }) {
           }
           throw new Error(data.error || "Email or password is incorrect.");
         }
-        persist(data.token, data.refreshToken);
+        persist(data.token);
+        await fetchCsrfToken(); // refresh CSRF token now that refresh cookie exists
         lastActivityRef.current = Date.now();
         return data;
       } catch (err) {
@@ -139,19 +136,17 @@ export function AuthProvider({ children }) {
    * fails — the user should always be able to log out of this device.
    */
   const logout = useCallback(async () => {
-    const refreshToken = sessionStorage.getItem(REFRESH_KEY);
     try {
-      if (refreshToken) {
-        await apiFetch("/api/auth/logout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-        });
-      }
+      await apiFetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
     } catch {
-      // ignore network errors on logout — still clear locally
+      // ignore network errors on logout
     }
     persist(null);
+    sessionStorage.removeItem(CSRF_KEY);
+    await fetchCsrfToken();
   }, [persist]);
 
   /**
@@ -244,32 +239,17 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      // Recently active — keep the access token fresh so the session
-      // doesn't drop out from under them mid-task.
-      const refreshToken = sessionStorage.getItem(REFRESH_KEY);
-      if (!refreshToken) return;
-
+      // Recently active — keep the access token fresh.
       try {
-        const res = await apiFetch("/api/auth/refresh", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-        });
+        const res = await apiFetch("/api/auth/refresh", { method: "POST" });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.token) {
-          // Re-persist with the SAME refresh token (the backend doesn't
-          // rotate it on /refresh) and the new access token.
           sessionStorage.setItem(STORAGE_KEY, data.token);
           setToken(data.token);
           setUser(decodeJwt(data.token));
         }
-        // A non-ok response (e.g. the 2-hour absolute cap was hit, or the
-        // session was revoked server-side) means apiFetch's global 401
-        // handler has already cleared storage and redirected — nothing more
-        // to do here.
       } catch {
-        // Network hiccup — try again on the next tick rather than logging
-        // the user out over a transient failure.
+        // transient network failure — retry next tick
       }
     }, TOKEN_REFRESH_INTERVAL_MS);
 
