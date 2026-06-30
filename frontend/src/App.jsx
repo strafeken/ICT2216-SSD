@@ -54,9 +54,10 @@ export default function App() {
   return (
     <Routes>
       {/* ── Public ───────────────────────────────────── */}
-      <Route path="/" element={<Landing />} />
-      {/* Auth pages: if already logged in, bounce to dashboard. */}
+      {/* Landing + auth pages: if already logged in, bounce to dashboard so the
+          dashboard is the effective home for authenticated users. */}
       <Route element={<RedirectIfAuthed />}>
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
