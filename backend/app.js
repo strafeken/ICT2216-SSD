@@ -42,7 +42,7 @@ app.use('/api/auth', require('./routes/authExtras'));
 app.use('/api/voip', require('./routes/voip'));
 
 app.use((err, req, res, _next) => {
-  if (err.code === 'BADCSRFTOKEN') {
+  if (err.code === 'EBADCSRFTOKEN') {
     return res.status(403).json({ error: 'Invalid CSRF token' });
   }
   system.error('Internal server error caught by global handler', {
