@@ -59,6 +59,11 @@ const registerChatHandlers = (io, socket) => {
         [conversationId, user.id, content.trim()]
       );
 
+      await pool.promise().query(
+        'UPDATE conversations SET updated_at = NOW() WHERE id = ?',
+        [conversationId]
+      );
+
       const message = {
         id: result.insertId,
         conversation_id: conversationId,

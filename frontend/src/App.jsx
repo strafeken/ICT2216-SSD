@@ -1,5 +1,5 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import { RequireAuth, RequireAdmin, RedirectIfAuthed } from "./auth/guards";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
+import { RequireAuth, RequireAdmin, RequireRole, RedirectIfAuthed } from "./auth/guards";
 import AppShell from "./components/AppShell";
 import AdminShell from "./components/AdminShell";
 
@@ -11,6 +11,8 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import TotpSetup from "./pages/TotpSetup";
 import Dashboard from "./pages/Dashboard";
+import ConsultExpert from "./pages/ConsultExpert";
+import ExpertDirectory from "./pages/ExpertDirectory";
 import NotFound from "./pages/NotFound";
 
 // Admin pages
@@ -36,6 +38,8 @@ import AdminLogs from "./pages/AdminLogs";
  *  Authenticated (any role), inside AppShell:
  *                    /dashboard              -> Dashboard
  *                    /security/2fa           -> TotpSetup
+ *                    /consult                -> ConsultExpert (worker + expert)
+ *                    /experts                -> ExpertDirectory (workers only)
  *
  *  Admin only, inside AdminShell:
  *                    /adm/managementDashboard -> AdminDashboard
@@ -50,6 +54,17 @@ import AdminLogs from "./pages/AdminLogs";
  *   - Server-side RBAC on every /api/admin/* route is the real boundary; the
  *     client guards are UX-only (SR-25).
  */
+function ChatLegacyRedirect() {
+  const { conversationId } = useParams();
+  const id = parseInt(conversationId, 10);
+  return (
+    <Navigate
+      to={Number.isInteger(id) ? `/consult?c=${id}` : "/consult"}
+      replace
+    />
+  );
+}
+
 export default function App() {
   return (
     <Routes>
@@ -74,13 +89,17 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/security/2fa" element={<TotpSetup />} />
 
-          {/* todo: profile + expert directory */}
-          {/* <Route path="/profile" element={<Profile />} /> */}
-          {/* <Route path="/experts" element={<ExpertDirectory />} /> */}
+          <Route element={<RequireRole roles={["worker", "expert"]} />}>
+            <Route path="/consult" element={<ConsultExpert />} />
+          </Route>
 
-          {/* todo: chat + video */}
-          {/* <Route path="/chat" element={<Chat />} /> */}
-          {/* <Route path="/chat/:conversationId" element={<Chat />} /> */}
+          <Route element={<RequireRole roles={["worker"]} />}>
+            <Route path="/experts" element={<ExpertDirectory />} />
+          </Route>
+
+          {/* Legacy redirects */}
+          <Route path="/conversations" element={<Navigate to="/consult" replace />} />
+          <Route path="/chat/:conversationId" element={<ChatLegacyRedirect />} />
         </Route>
       </Route>
 
