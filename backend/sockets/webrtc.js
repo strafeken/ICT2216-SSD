@@ -51,8 +51,17 @@ const registerWebRTCHandlers = (io, socket) => {
             socket.emit('call:error', { message: 'Access denied to this conversation' });
             return;
         }
+
+        const room = `call:${conversationId}`;
+        const inRoom = await io.in(room).fetchSockets();
+        const others = inRoom.filter((s) => s.user.id !== user.id);
+        if (others.length === 0) {
+            socket.emit('call:error', { message: 'The other participant is not in this conversation. They must be logged in and have this thread open.' });
+            return;
+        }
+
         system.info('Relaying call offer', { context: 'webrtc', userId: user.id, conversationId });
-        socket.to(`call:${conversationId}`).emit('call:offer', { offer, fromUserId: user.id });
+        socket.to(room).emit('call:offer', { offer, fromUserId: user.id });
     });
 
     // Relay SDP answer

@@ -21,10 +21,9 @@ export default function AppShell() {
 
   const links = [
     { to: "/dashboard", label: "Home", roles: ["worker", "expert", "admin"] },
-    { to: "/experts", label: "Experts", roles: ["worker", "expert", "admin"] },
-    { to: "/chat", label: "Messages", roles: ["worker", "expert", "admin"] },
-    { to: "/profile", label: "Profile", roles: ["worker", "expert", "admin"] },
-    { to: "/admin", label: "Admin", roles: ["admin"] },
+    { to: "/experts", label: "Experts", roles: ["worker"] },
+    { to: "/consult", label: "Consult", roles: ["worker", "expert"] },
+    { to: "/adm/managementDashboard", label: "Admin", roles: ["admin"] },
   ];
 
   return (
