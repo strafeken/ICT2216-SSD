@@ -2,6 +2,9 @@ const path = require('path');
 
 const sanitizeLog = (value) => String(value).replace(/[\r\n]/g, ' ');
 
+// Intentionally matches control characters: sanitizeText strips them from user
+// input so they cannot smuggle terminal escapes or corrupt stored text.
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
 function sanitizeText(value, { maxLength = 4000 } = {}) {

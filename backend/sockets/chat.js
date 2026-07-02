@@ -1,8 +1,9 @@
 const pool = require('../db/pool');
 const { system } = require('../utils/winstonLogger');
 const { sanitizeText } = require('../utils/sanitize');
-const { isParticipant, getConversationHistory, getConversationPage } = require('../utils/conversationRepository');
+const { getConversationHistory, getConversationPage } = require('../utils/conversationRepository');
 const { createSocketLimiter } = require('../middleware/socketRateLimiter');
+const { authorizeConversationEvent } = require('./guards');
 
 const sendLimiter = createSocketLimiter({ windowMs: 10_000, max: 20 }); // 20 messages per 10 seconds
 
@@ -15,28 +16,23 @@ const registerChatHandlers = (io, socket) => {
    * Room-membership guard: cheap, in-memory check that this socket has
    * already joined the room for this conversation. This is NOT the
    * authoritative access-control decision (that's always the DB check via
-   * conversationRepository -- membership in `conversations` can only be
-   * established/confirmed against the database), but it lets us reject a
-   * mismatched/forged conversationId on `chat:send` without a DB round trip,
-   * and it stops a socket from writing into a room it never properly
-   * joined, even if it happens to know a valid conversationId.
+   * authorizeConversationEvent -- membership in `conversations`, plus a live,
+   * non-revoked session, can only be confirmed against the database), but it
+   * lets us reject a mismatched/forged conversationId on `chat:send` without a
+   * DB round trip, and it stops a socket from writing into a room it never
+   * properly joined, even if it happens to know a valid conversationId.
    */
   function hasJoinedRoom(conversationId) {
     return socket.rooms.has(`chat:${conversationId}`);
   }
 
   // ---- Join a conversation ----
-  socket.on('chat:join', async ({ conversationId }) => {
+  socket.on('chat:join', async ({ conversationId: rawId } = {}) => {
     try {
-      const id = Number.parseInt(conversationId, 10);
-      if (!Number.isInteger(id) || id < 1) {
-        socket.emit('chat:error', { message: 'Invalid conversation.' });
-        return;
-      }
-
-      // Authoritative check
-      const allowed = await isParticipant(id, user.id);
-      if (!allowed) {
+      // Authoritative gate: id parse + live-session + participant (SR-04).
+      // Same guard the call events use, so chat and call share one door.
+      const id = await authorizeConversationEvent(socket, rawId);
+      if (!id) {
         socket.emit('chat:error', { message: 'Access denied to this conversation' });
         return;
       }
@@ -64,16 +60,16 @@ const registerChatHandlers = (io, socket) => {
   });
 
   // ---- Load older messages (pagination) ----
-  socket.on('chat:load-more', async ({ conversationId, before }) => {
+  socket.on('chat:load-more', async ({ conversationId: rawId, before } = {}) => {
     try {
-      const id = Number.parseInt(conversationId, 10);
-      if (!Number.isInteger(id) || id < 1) {
-        socket.emit('chat:error', { message: 'Invalid conversation.' });
+      // Authoritative gate (SR-04) — participant status could have changed.
+      const id = await authorizeConversationEvent(socket, rawId);
+      if (!id) {
+        socket.emit('chat:error', { message: 'Access denied to this conversation' });
         return;
       }
 
-      // Must already be in the room before paginating — same fast-path guard
-      // as chat:send to avoid a DB round trip on bad requests.
+      // Must already be in the room before paginating.
       if (!hasJoinedRoom(id)) {
         socket.emit('chat:error', { message: 'Join the conversation before loading messages.' });
         return;
@@ -82,13 +78,6 @@ const registerChatHandlers = (io, socket) => {
       // Validate the `before` timestamp — must be a parseable date string.
       if (!before || Number.isNaN(Date.parse(before))) {
         socket.emit('chat:error', { message: 'Invalid pagination cursor.' });
-        return;
-      }
-
-      // Authoritative re-check — participant status could have changed.
-      const allowed = await isParticipant(id, user.id);
-      if (!allowed) {
-        socket.emit('chat:error', { message: 'Access denied to this conversation' });
         return;
       }
 
@@ -101,9 +90,9 @@ const registerChatHandlers = (io, socket) => {
   });
 
   // ---- Send a text message ----
-  socket.on('chat:send', async ({ conversationId, content }) => {
+  socket.on('chat:send', async ({ conversationId: rawId, content } = {}) => {
     try {
-      const id = Number.parseInt(conversationId, 10);
+      const id = Number.parseInt(rawId, 10);
       if (!Number.isInteger(id) || id < 1) {
         socket.emit('chat:error', { message: 'Invalid conversation.' });
         return;
@@ -126,11 +115,11 @@ const registerChatHandlers = (io, socket) => {
         return;
       }
 
-      // Authoritative re-check -- the room-membership fast path above proves
-      // this socket joined at some point, but conversation membership is
-      // still verified against the DB on every write, not just on join.
-      const allowed = await isParticipant(id, user.id);
-      if (!allowed) {
+      // Authoritative re-check (SR-04): live session + participant, verified
+      // against the DB on every write, not just on join. The room-membership
+      // fast path above only proves this socket joined at some point.
+      const authedId = await authorizeConversationEvent(socket, id);
+      if (!authedId) {
         socket.emit('chat:error', { message: 'Access denied to this conversation' });
         return;
       }
